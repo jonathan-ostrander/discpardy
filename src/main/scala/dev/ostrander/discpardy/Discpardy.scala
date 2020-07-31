@@ -1,10 +1,9 @@
 package dev.ostrander.discpardy
 
-import ackcord._
-import ackcord.data._
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+import ackcord.APIMessage
+import ackcord.ClientSettings
 import ackcord.gateway.GatewayIntents
+import akka.actor.typed.ActorSystem
 
 object Discpardy extends App {
   require(args.nonEmpty, "Please provide a token")
@@ -17,12 +16,13 @@ object Discpardy extends App {
 
   clientSettings.createClient().foreach { client =>
     client.onEventSideEffects { cache => {
-      case APIMessage.Ready(_) => println("Now ready")
+      case APIMessage.Ready(_) => clientSettings.system.log.info("Now ready")
     }}
 
-    val commands = new Commands(client, categories)
+    val question = ActorSystem(Question(client), "Discpardy")
+    val commands = new Commands(client, categories, question)
 
-    client.commands.runNewNamedCommand(commands.start)
+    client.commands.runNewNamedCommand(commands.question)
 
     client.login()
   }

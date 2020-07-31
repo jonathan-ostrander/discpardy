@@ -3,7 +3,6 @@ package dev.ostrander.discpardy
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import scala.io.Source
-import shapeless.Fin
 
 object Jeopardy {
   case class Clue(value: Int, question: String, answer: String)

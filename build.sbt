@@ -9,8 +9,13 @@ lazy val root = (project in file("."))
   .settings(
     name := "discpardy",
     resolvers += Resolver.JCenterRepository,
+    scalacOptions ++= List(
+      "-Xfatal-warnings",
+      "-Xlint:unused",
+    ),
     libraryDependencies ++= List(   
       "net.katsstuff" %% "ackcord" % "0.16.1",
+      "ch.qos.logback" % "logback-classic" % "1.2.3",
       "io.spray" %%  "spray-json" % "1.3.5",
       scalaTest % Test,
     )

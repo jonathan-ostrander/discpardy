@@ -1,35 +1,32 @@
 package dev.ostrander.discpardy
 
-import ackcord.DiscordClient
 import ackcord.commands.CommandController
 import ackcord.commands.MessageParser
 import ackcord.commands.NamedCommand
+import ackcord.data.TextChannel
+import ackcord.requests.Requests
 import akka.actor.typed.ActorRef
-import dev.ostrander.discpardy.Jeopardy.Category
-import dev.ostrander.discpardy.Jeopardy.FinalJeopardy
-import dev.ostrander.discpardy.Jeopardy.FullGame
-import scala.util.Random
+import dev.ostrander.discpardy.actor.GameManager
+import dev.ostrander.discpardy.actor.Question
 
 class Commands(
-  client: DiscordClient,
-  categories: List[Category],
-  finals: List[FinalJeopardy],
+  requests: Requests,
   questionActor: ActorRef[Question.Command],
-  roundActor: ActorRef[Round.Command],
-) extends CommandController(client.requests) {
-  val question: NamedCommand[MessageParser.RemainingAsString] =
-    Command.named("!", "question" :: Nil, mustMention = false)
+  gameActor: ActorRef[GameManager.Command],
+) extends CommandController(requests) {
+  private[this] def create[C](
+    command: String,
+    actor: ActorRef[C],
+    c: TextChannel => C,
+  ): NamedCommand[MessageParser.RemainingAsString] =
+    Command.named("!", command :: Nil, mustMention = false)
       .parsing[MessageParser.RemainingAsString]
       .withSideEffects { r =>
-        val category = categories(Random.nextInt(categories.size))
-        val clue = category.clues(Random.nextInt(category.clues.size))
-        questionActor ! Question.CreateClue(r.textChannel, category.name, clue)
+        actor ! c(r.textChannel)
       }
-  val round: NamedCommand[MessageParser.RemainingAsString] =
-    Command.named("!", "round" :: Nil, mustMention = false)
-      .parsing[MessageParser.RemainingAsString]
-      .withSideEffects { r =>
-        val game = FullGame.fromCategories(categories, finals)
-        roundActor ! Round.PrintRound(r.textChannel, game.firstRound)
-      }
+
+  val commands: List[NamedCommand[MessageParser.RemainingAsString]] = List(
+    create("question", questionActor, Question.CreateClue.apply),
+    create("game", gameActor, GameManager.CreateGame.apply),
+  )
 }

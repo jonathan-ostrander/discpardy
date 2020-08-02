@@ -1,4 +1,4 @@
-package dev.ostrander.discpardy
+package dev.ostrander.discpardy.actor
 
 import ackcord.APIMessage.MessageMessage
 import ackcord.DiscordClient
@@ -9,20 +9,23 @@ import ackcord.syntax.TextChannelSyntax
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import dev.ostrander.discpardy.Jeopardy.Clue
+import dev.ostrander.discpardy.model.Category
+import dev.ostrander.discpardy.model.Clue
 import java.util.concurrent.TimeUnit
 import org.apache.commons.text.similarity.JaccardSimilarity
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
 
 object Question {
   sealed trait Command
-  case class CreateClue(channel: TextChannel, category: String, clue: Clue) extends Command
+  case class CreateClue(channel: TextChannel) extends Command
   case class ClueCreated(channel: TextChannel, clue: Clue) extends Command
   case class ClearAnswer(textChannelId: TextChannelId) extends Command
 
-  def apply(client: DiscordClient): Behavior[Command] = {
-    val channelMap: TrieMap[TextChannelId, ActorRef[Answer.Command]] = TrieMap.empty[TextChannelId, ActorRef[Answer.Command]]
+  def apply(client: DiscordClient, categories: List[Category]): Behavior[Command] = {
+    val channelMap: TrieMap[TextChannelId, ActorRef[Answer.Command]] =
+      TrieMap.empty[TextChannelId, ActorRef[Answer.Command]]
 
     client.onEventSideEffects(_ => {
       case mm: MessageMessage =>
@@ -32,11 +35,13 @@ object Question {
     })
 
     Behaviors.receive[Command] {
-      case (ctx, CreateClue(channel, category, clue)) =>
+      case (ctx, CreateClue(channel)) =>
+        val category = categories(Random.nextInt(categories.size))
+        val clue = category.clues(Random.nextInt(category.clues.size))
         ctx.log.info(s"Creating clue in ${channel.id}")
         val message = channel.sendMessage(s"Category: $category\nValue: $$${clue.value}\nQuestion: ${clue.question}")
         ctx.pipeToSelf(
-          client.requests.singleFuture(message)
+          client.requests.singleFuture(message),
         )(_ => ClueCreated(channel, clue))
         Behaviors.same
       case (ctx, ClueCreated(channel, clue)) =>
@@ -69,18 +74,25 @@ object Answer {
   val similarity = new JaccardSimilarity()
   def correct(left: String, right: String): Boolean = similarity(left, right) >= threshold
 
-  def apply(client: DiscordClient, channel: TextChannel, clue: Clue, parent: ActorRef[Question.Command]): Behavior[Command] = {
+  def apply(
+    client: DiscordClient,
+    channel: TextChannel,
+    clue: Clue,
+    parent: ActorRef[Question.Command],
+  ): Behavior[Command] =
     Behaviors.receive[Command] {
       case (ctx, Message(value)) =>
-        if (value.message.authorUser(value.cache.current).exists(_.bot.exists(identity))) {
+        if (value.message.authorUser(value.cache.current).exists(_.bot.exists(identity)))
           Behaviors.same
-        } else {
+        else {
           val messageAnswer = value.message.content.toLowerCase()
           val score = similarity(messageAnswer, clue.answer.toLowerCase())
           ctx.log.info(s"${messageAnswer} and ${clue.answer} are ${score} similar.")
           if (correct(messageAnswer, clue.answer)) {
             client.requests.singleFuture(value.message.createReaction("✅"))
-            client.requests.singleFuture(channel.sendMessage(s""""$messageAnswer" is correct! (Actual answer: ${clue.answer}, similarity score: ${score})"""))
+            client.requests.singleFuture(channel.sendMessage(
+              s""""$messageAnswer" is correct! (Actual answer: ${clue.answer}, similarity score: ${score})""",
+            ))
             parent ! Question.ClearAnswer(channel.id)
             Behaviors.stopped
           } else {
@@ -98,5 +110,4 @@ object Answer {
         parent ! Question.ClearAnswer(channel.id)
         Behaviors.stopped
     }
-  }
 }

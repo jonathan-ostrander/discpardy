@@ -1,20 +1,32 @@
 package dev.ostrander.discpardy
 
-import ackcord.DiscordClient
 import ackcord.commands.CommandController
 import ackcord.commands.MessageParser
 import ackcord.commands.NamedCommand
+import ackcord.data.TextChannel
+import ackcord.requests.Requests
 import akka.actor.typed.ActorRef
-import dev.ostrander.discpardy.Jeopardy.Category
-import scala.util.Random
+import dev.ostrander.discpardy.actor.GameManager
+import dev.ostrander.discpardy.actor.Question
 
-class Commands(client: DiscordClient, categories: List[Category], questionActor: ActorRef[Question.Command]) extends CommandController(client.requests) {
-  val question: NamedCommand[MessageParser.RemainingAsString] =
-    Command.named("!", "question" :: Nil, mustMention = false)
+class Commands(
+  requests: Requests,
+  questionActor: ActorRef[Question.Command],
+  gameActor: ActorRef[GameManager.Command],
+) extends CommandController(requests) {
+  private[this] def create[C](
+    command: String,
+    actor: ActorRef[C],
+    c: TextChannel => C,
+  ): NamedCommand[MessageParser.RemainingAsString] =
+    Command.named("!", command :: Nil, mustMention = false)
       .parsing[MessageParser.RemainingAsString]
       .withSideEffects { r =>
-        val category = categories(Random.nextInt(categories.size))
-        val clue = category.clues(Random.nextInt(category.clues.size))
-        questionActor ! Question.CreateClue(r.textChannel, category.name, clue)
+        actor ! c(r.textChannel)
       }
+
+  val commands: List[NamedCommand[MessageParser.RemainingAsString]] = List(
+    create("question", questionActor, Question.CreateClue.apply),
+    create("game", gameActor, GameManager.CreateGame.apply),
+  )
 }

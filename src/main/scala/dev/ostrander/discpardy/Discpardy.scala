@@ -24,7 +24,7 @@ object Discpardy extends App {
       }
     }
 
-    val question = ActorSystem(Question(client, jeopardy.firstRounds ++ jeopardy.secondRounds), "Questions")
+    val question = ActorSystem(Question(client, jeopardy.firstRounds ++ jeopardy.secondRounds, None), "Questions")
     val game = ActorSystem(GameManager(client, jeopardy), "Games")
     val commands = new Commands(client.requests, question, game)
 

@@ -1,5 +1,6 @@
 package dev.ostrander.discpardy
 
+import org.apache.commons.text.similarity.JaccardSimilarity
 import scala.io.Source
 import scala.util.Random
 import spray.json.DefaultJsonProtocol._
@@ -38,15 +39,27 @@ package object model {
     implicit val gameFormat: JsonFormat[RawGame] = jsonFormat3(RawGame)
   }
 
-  case class Clue(value: Int, question: String, answer: String) {
+  private[model] val jaccard = new JaccardSimilarity()
+  private[model] def similarity(left: String, right: String): Double = jaccard(left, right)
+
+  trait Matchable {
+    def sanitizable: String
+    def sanitized: String = sanitizable.filter(_.isLetter).toLowerCase
+    def matchScore(message: String): Double = similarity(sanitized, message.filter(_.isLetter).toLowerCase)
+  }
+
+  case class Clue(value: Int, question: String, answer: String) extends Matchable {
     def dollars: String = s"$$$value"
+    def sanitizable: String = answer
   }
 
   case class Category(
     name: String,
     clues: List[Clue],
-  ) {
+  ) extends Matchable {
     require(clues.size == 5, "Categories must have exactly 5 clues")
+
+    def sanitizable: String = name
   }
 
   case class FinalJeopardy(category: String, question: String, answer: String)
@@ -73,9 +86,49 @@ package object model {
         )
       ).mkString("```" + separator, separator, separator + "```")
     }
+
+    def clue(index: ClueIndex): Clue = categories(index.category).clues(index.clue)
+    def getClueIndex(message: String): ClueIndex = {
+      val category = categories.zipWithIndex.maxBy { case (c, _) => c.matchScore(message) }._2
+      val clueIndex = categories(category).clues.map(_.value.toString).zipWithIndex.maxBy {
+        case (d, _) => similarity(d, message.filter(_.isDigit))
+      }._2
+      ClueIndex(category, clueIndex)
+    }
   }
 
   case class Game(firstRound: Round, secondRound: Round, finalJeopardy: FinalJeopardy)
+
+  case class ClueIndex(category: Int, clue: Int) {
+    require(category >= 0 && category < 6, "there can only be 6 categories in a round")
+    require(clue >= 0 && clue < 5, "there can only be 5 clues in a category")
+  }
+  object ClueIndex {
+    def random: ClueIndex = ClueIndex(Random.nextInt(6), Random.nextInt(5))
+  }
+
+  sealed trait RoundNumber
+  object RoundNumber {
+    case object Jeopardy extends RoundNumber
+    case object DoubleJeopardy extends RoundNumber
+  }
+
+  sealed trait GameProgress
+  object GameProgress {
+    case class RoundState(
+      roundNumber: RoundNumber,
+      dailyDoubles: Set[ClueIndex],
+      used: Set[ClueIndex],
+    ) extends GameProgress {
+      def isComplete: Boolean = used.size == 30
+      def next(clue: ClueIndex): RoundState = this.copy(used = used + clue)
+    }
+    
+    def firstRoundStart: RoundState = RoundState(RoundNumber.Jeopardy, Set(ClueIndex.random), Set.empty)
+    def secondRoundStart: RoundState = RoundState(RoundNumber.DoubleJeopardy, Set(ClueIndex.random, ClueIndex.random), Set.empty)
+
+    case object FinalJeopardy extends GameProgress
+  }
 
   case class LoadedCategories(
     firstRounds: List[Category],

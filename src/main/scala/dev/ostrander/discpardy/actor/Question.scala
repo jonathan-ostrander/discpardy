@@ -19,11 +19,11 @@ import scala.util.Random
 
 object Question {
   sealed trait Command
-  case class CreateClue(channel: TextChannel) extends Command
+  case class CreateClue(channel: TextChannel, clue: Option[(String, Clue)]) extends Command
   case class ClueCreated(channel: TextChannel, clue: Clue) extends Command
   case class ClearAnswer(textChannelId: TextChannelId) extends Command
 
-  def apply(client: DiscordClient, categories: List[Category]): Behavior[Command] = {
+  def apply(client: DiscordClient, categories: List[Category], gameRef: Option[ActorRef[Game.Command]]): Behavior[Command] = {
     val channelMap: TrieMap[TextChannelId, ActorRef[Answer.Command]] =
       TrieMap.empty[TextChannelId, ActorRef[Answer.Command]]
 
@@ -35,9 +35,10 @@ object Question {
     })
 
     Behaviors.receive[Command] {
-      case (ctx, CreateClue(channel)) =>
-        val category = categories(Random.nextInt(categories.size))
-        val clue = category.clues(Random.nextInt(category.clues.size))
+      case (ctx, CreateClue(channel, maybeClue)) =>
+        val (catogory, clue) = maybeClue.getOrElse {
+          categories(Random.nextInt(categories.size)).name -> category.clues(Random.nextInt(category.clues.size))
+        }
         ctx.log.info(s"Creating clue in ${channel.id}")
         val message = channel.sendMessage(s"Category: $category\nValue: $$${clue.value}\nQuestion: ${clue.question}")
         ctx.pipeToSelf(

@@ -1,0 +1,7 @@
+Welcome to Jeopardy, %s! I'm Alex Trebek and here's how to play:
+
+I will prompt the last user to answer a question correctly to select a category and question value. That user needs to respond in the channel with one of the cateogory names and a dollar value. I will respond with the answer and you must provide the correct question (it doesn't really matter if you respond with a question or not). There's no buzzing; the first person to respond with a correct answer will get the points and control of the board. You only get one chance to answer. If you answer incorrectly, the value of the question will be deducted from your score and I won't react to any more of your answers.
+
+In the event of a daily double, I will prompt the user that selected it for a wager. They will be able to wager up to their score, or the minimum max wager for the round ($1000 in jeorpardy, $2000, in double jeopardy). Daily doubles are randomly selected and there is 1 in jeopardy and 2 in double jeopardy.
+
+After the double jeopardy is complete, I will message the channel with the category and then prompt everyone with a positive score in a DM for a wager. Once all of the wagers have been received, I will message the channel with the question and prompt everyone in a DM to send me their answers. Once everyone has submitted their answers (or time is up), I will message the channel with the correct answer and the final score.
